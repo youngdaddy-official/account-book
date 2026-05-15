@@ -21,14 +21,23 @@ if "docs.google.com" in SHEET_URL:
             df['승인금액'] = pd.to_numeric(df['승인금액'], errors='coerce').fillna(0)
         
         # --- 사이드바 설정 ---
-        st.sidebar.header("⚙️ 분석 설정")
+        st.sidebar.header("⚙️ 분석 및 정렬 설정")
         
+        # 분석 기준 선택
         group_col = st.sidebar.selectbox(
-            "무엇을 기준으로 분석할까요?",
+            "1. 무엇을 기준으로 분석할까요?",
             options=df.columns.tolist(),
             index=df.columns.tolist().index('카테고리') if '카테고리' in df.columns else 0
         )
 
+        # 정렬 기준 선택 (새로 추가된 기능!)
+        sort_by = st.sidebar.selectbox(
+            "2. 어떤 순서로 줄을 세울까요?",
+            options=["총합계", "건수", "평균"],
+            index=0
+        )
+
+        # 상세 필터링
         unique_vals = sorted(df[group_col].unique().tolist())
         selected_vals = st.sidebar.multiselect(
             f"[{group_col}] 내에서 선택하세요",
@@ -49,9 +58,8 @@ if "docs.google.com" in SHEET_URL:
 
         st.divider()
 
-        # --- 차트 영역 (정렬된 데이터 사용) ---
+        # --- 차트 영역 ---
         stats = filtered_df.groupby(group_col)['승인금액'].sum().reset_index()
-        # 여기서 '총합계' 기준 내림차순 정렬
         stats = stats.sort_values(by='승인금액', ascending=False)
 
         col_left, col_right = st.columns([1, 1])
@@ -69,22 +77,23 @@ if "docs.google.com" in SHEET_URL:
 
         st.divider()
 
-        # --- 하단 통계 표 (요청하신 정렬 기능 적용) ---
+        # --- 하단 통계 표 (정렬 기준 반영) ---
         st.subheader("📋 데이터 요약 및 상세 내역")
         tab1, tab2 = st.tabs(["항목별 요약표", "개별 영수증 내역"])
         
         with tab1:
-            # 1. 먼저 그룹화하여 합계 계산
+            # 1. 그룹화하여 데이터 계산
             summary = filtered_df.groupby(group_col)['승인금액'].agg(['sum', 'count', 'mean']).reset_index()
             summary.columns = [group_col, '총합계', '건수', '평균']
             
-            # 2. ★중요★ 숫자 상태일 때 '총합계' 기준 내림차순으로 먼저 정렬!
-            summary = summary.sort_values(by='총합계', ascending=False)
+            # 2. 사이드바에서 선택한 기준(sort_by)으로 내림차순 정렬
+            summary = summary.sort_values(by=sort_by, ascending=False)
             
-            # 3. 정렬이 끝난 후 보기 좋게 '원'과 콤마 붙이기
+            # 3. 보기 좋게 포맷팅 (정렬 후 변환)
             summary_display = summary.copy()
             summary_display['총합계'] = summary_display['총합계'].map('{:,.0f}원'.format)
             summary_display['평균'] = summary_display['평균'].map('{:,.0f}원'.format)
+            summary_display['건수'] = summary_display['건수'].map('{:,}건'.format)
             
             st.dataframe(summary_display, use_container_width=True)
             
