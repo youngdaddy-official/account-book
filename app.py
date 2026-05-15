@@ -3,69 +3,91 @@ import pandas as pd
 import plotly.express as px
 
 # 1. 본인의 구글 시트 주소를 여기에 넣으세요
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1tue8zzo52itHri8WX-BzkB_4gjctqXaIY3A-nXg7qPU/edit?usp=sharing"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/이부분에_본인의_시트주소를_넣으세요/edit#gid=0"
 
-st.set_page_config(page_title="가계부 통계 시스템", layout="wide")
-st.title("📊 항목별 지출 통계 리포트")
+st.set_page_config(page_title="프리미엄 가계부 분석기", layout="wide")
+st.title("📑 전 항목 다이나믹 가계부 분석 시스템")
 
 if "docs.google.com" in SHEET_URL:
     try:
+        # 데이터 로드
         csv_url = SHEET_URL.split("/edit")[0] + "/export?format=csv"
         df = pd.read_csv(csv_url)
         df.columns = [col.strip() for col in df.columns]
 
-        # 금액 숫자 변환 (0원 문제 해결 코드 포함)
+        # 승인금액 숫자 변환 (0원 방지 로직)
         if '승인금액' in df.columns:
             df['승인금액'] = df['승인금액'].astype(str).str.replace(r'[^\d]', '', regex=True)
             df['승인금액'] = pd.to_numeric(df['승인금액'], errors='coerce').fillna(0)
         
-        # --- 통계 계산 시작 ---
-        if '카테고리' in df.columns:
-            # 2. 항목별 합계 및 건수 계산
-            stats_df = df.groupby('카테고리')['승인금액'].agg(['sum', 'count']).reset_index()
-            stats_df.columns = ['항목', '총 지출액', '결제 건수']
-            stats_df = stats_df.sort_values(by='총 지출액', ascending=False)
+        # --- 사이드바 설정 ---
+        st.sidebar.header("⚙️ 분석 설정")
+        
+        # 2. 분석할 기준 항목 선택 (승인일, 가맹점명, 카테고리 등 모든 열 대상)
+        group_col = st.sidebar.selectbox(
+            "무엇을 기준으로 분석할까요?",
+            options=df.columns.tolist(),
+            index=df.columns.tolist().index('카테고리') if '카테고리' in df.columns else 0
+        )
 
-            # --- 화면 구성 ---
-            # 상단 요약
-            total_amount = int(stats_df['총 지출액'].sum())
-            st.metric("이번 달 총 지출", f"{total_amount:,} 원")
-            
-            st.divider()
+        # 3. 상세 필터링 (선택한 항목 내에서 특정 값들만 보기)
+        unique_vals = sorted(df[group_col].unique().tolist())
+        selected_vals = st.sidebar.multiselect(
+            f"[{group_col}] 내에서 선택하세요",
+            options=unique_vals,
+            default=unique_vals
+        )
 
-            # 좌측: 통계 표 / 우측: 그래프
-            col1, col2 = st.columns([1, 1])
+        # 데이터 필터링 적용
+        filtered_df = df[df[group_col].isin(selected_vals)]
 
-            with col1:
-                st.subheader("📋 항목별 요약")
-                # 천단위 콤마 표시를 위해 포맷팅
-                display_stats = stats_df.copy()
-                display_stats['총 지출액'] = display_stats['총 지출액'].apply(lambda x: f"{int(x):,}원")
-                display_stats['결제 건수'] = display_stats['결제 건수'].apply(lambda x: f"{x}건")
-                st.table(display_stats) # 깔끔한 표 형태로 출력
+        # --- 대시보드 화면 구성 ---
+        
+        # 상단 요약 지표
+        total_sum = int(filtered_df['승인금액'].sum())
+        total_count = len(filtered_df)
+        
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"선택된 {group_col} 합계", f"{total_sum:,} 원")
+        c2.metric("결제 건수", f"{total_count} 건")
+        c3.metric("평균 결제액", f"{int(total_sum/total_count) if total_count > 0 else 0:,} 원")
 
-            with col2:
-                st.subheader("🍕 지출 비중 (차트)")
-                fig_pie = px.pie(stats_df, values='총 지출액', names='항목', hole=0.4,
-                                 color_discrete_sequence=px.colors.qualitative.Pastel)
-                st.plotly_chart(fig_pie, use_container_width=True)
+        st.divider()
 
-            st.divider()
+        # 차트 영역
+        col_left, col_right = st.columns([1, 1])
 
-            # 하단: 막대 그래프
-            st.subheader("📈 항목별 지출 금액 비교")
-            fig_bar = px.bar(stats_df, x='항목', y='총 지출액', text_auto=',.0f',
-                             color='항목', color_discrete_sequence=px.colors.qualitative.Safe)
+        with col_left:
+            st.subheader(f"📊 {group_col}별 지출 비중")
+            stats = filtered_df.groupby(group_col)['승인금액'].sum().reset_index().sort_values(by='승인금액', ascending=False)
+            fig_pie = px.pie(stats, values='승인금액', names=group_col, hole=0.4,
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col_right:
+            st.subheader(f"📈 {group_col}별 지출 순위")
+            fig_bar = px.bar(stats, x=group_col, y='승인금액', text_auto=',.0f',
+                             color=group_col, color_discrete_sequence=px.colors.qualitative.Safe)
             st.plotly_chart(fig_bar, use_container_width=True)
 
-        else:
-            st.warning("구글 시트에 '카테고리' 열이 없습니다. L열의 제목을 '카테고리'로 설정했는지 확인해주세요.")
+        st.divider()
 
-        # 상세 내역 접기/펴기
-        with st.expander("🔎 전체 상세 내역 보기"):
-            st.dataframe(df, use_container_width=True)
+        # 하단 통계 표 및 상세 내역
+        st.subheader("📋 데이터 요약 및 상세 내역")
+        tab1, tab2 = st.tabs(["항목별 요약표", "개별 영수증 내역"])
+        
+        with tab1:
+            summary = filtered_df.groupby(group_col)['승인금액'].agg(['sum', 'count', 'mean']).reset_index()
+            summary.columns = [group_col, '총합계', '건수', '평균']
+            # 천단위 콤마 포맷팅
+            summary['총합계'] = summary['총합계'].map('{:,.0f}원'.format)
+            summary['평균'] = summary['평균'].map('{:,.0f}원'.format)
+            st.dataframe(summary, use_container_width=True)
+            
+        with tab2:
+            st.dataframe(filtered_df, use_container_width=True)
 
     except Exception as e:
-        st.error(f"오류 발생: {e}")
+        st.error(f"데이터를 처리하는 중 오류가 발생했습니다: {e}")
 else:
     st.info("시트 주소를 입력해주세요.")
