@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 
 # 1. 본인의 구글 시트 주소를 여기에 넣으세요
-SHEET_URL = "https://docs.google.com/spreadsheets/d/이부분에_본인의_시트주소를_넣으세요/edit#gid=0"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1tue8zzo52itHri8WX-BzkB_4gjctqXaIY3A-nXg7qPU/edit?usp=sharing"
 
 st.set_page_config(page_title="프리미엄 가계부 분석기", layout="wide")
 st.title("📑 전 항목 다이나믹 가계부 분석 시스템")
